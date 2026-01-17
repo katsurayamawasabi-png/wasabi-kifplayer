@@ -1,0 +1,914 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>KIF Viewer (branch)</title>
+  <style>
+    :root{
+      --sq: 44px;
+      --wood1:#d9b27a;
+      --wood2:#cfa56a;
+      --woodLine:#805a2a;
+      --cellLine: rgba(0,0,0,.55);
+      --panel:#ffffff;
+      --shadow: 0 10px 26px rgba(0,0,0,.10);
+    }
+    body{
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", "Segoe UI", sans-serif;
+      margin: 16px;
+      background: #f6f6f6;
+      color:#111;
+    }
+    h1{ font-size: 18px; margin: 0 0 12px; }
+    .row{ display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start; }
+    .panel{
+      border: 1px solid #e6e6e6;
+      border-radius: 14px;
+      padding: 12px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+    .controls{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    button{
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid #cfcfcf;
+      background: #fff;
+      cursor: pointer;
+    }
+    button:active{ transform: translateY(1px); }
+    input[type="range"]{ width: min(560px, 92vw); }
+    textarea{
+      width: min(560px, 92vw);
+      height: 140px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+    }
+    .meta{ font-size: 12px; color:#444; white-space: pre-wrap; margin-top:10px; }
+
+    /* --- board area layout (left hand / board / right hand) --- */
+    .boardArea{
+      display:grid;
+      grid-template-columns: 150px auto 150px;
+      gap: 12px;
+      align-items:start;
+    }
+    .handBox{
+      border-radius: 12px;
+      padding: 10px 10px 8px;
+      background: #fff;
+      border: 1px solid #eee;
+      box-shadow: 0 6px 18px rgba(0,0,0,.06);
+      min-height: calc(var(--sq) * 3);
+    }
+    .handTitle{
+      font-weight: 800;
+      font-size: 13px;
+      margin-bottom: 6px;
+      display:flex;
+      justify-content: space-between;
+      align-items: baseline;
+      color:#222;
+    }
+    .handGrid{
+      display:flex;
+      flex-wrap:wrap;
+      gap: 6px;
+      align-items:center;
+    }
+    .handPiece{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-width: 38px;
+      padding: 6px 8px;
+      border-radius: 999px;
+      border: 1px solid #e7e7e7;
+      background: #fafafa;
+      font-family: "Hiragino Mincho ProN","Hiragino Mincho Pro","Noto Serif JP","Yu Mincho",serif;
+      font-size: 16px;
+      letter-spacing: .02em;
+    }
+    .handPiece small{ font-size: 12px; opacity:.75; margin-left:6px; }
+
+    /* position rules you requested */
+    .handLeft{ align-self:start; } /* 後手: 左上寄り */
+    .handRight{ align-self:end; }  /* 先手: 右下寄り */
+
+    /* --- board styling --- */
+    .boardWrap{
+      display:flex;
+      flex-direction:column;
+      gap: 10px;
+      align-items:center;
+    }
+    .boardFrame{
+      padding: 10px;
+      border-radius: 14px;
+      background:
+        linear-gradient(135deg, var(--wood1), var(--wood2));
+      box-shadow: 0 10px 26px rgba(0,0,0,.18);
+      border: 1px solid rgba(0,0,0,.15);
+    }
+    table.board{
+      border-collapse: collapse;
+      user-select:none;
+      background: rgba(255,255,255,.06);
+    }
+    table.board td{
+      width: var(--sq);
+      height: var(--sq);
+      border: 1px solid var(--cellLine);
+      text-align:center;
+      vertical-align:middle;
+      font-size: 20px;
+      position:relative;
+    }
+    table.board td::after{
+      content:"";
+      position:absolute;
+      inset:0;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.20);
+      pointer-events:none;
+    }
+    table.board td .gote{
+      display:inline-block;
+      transform: rotate(180deg);
+    }
+    table.board td .piece{
+      font-family: "Hiragino Mincho ProN","Hiragino Mincho Pro","Noto Serif JP","Yu Mincho",serif;
+      font-weight: 700;
+      text-shadow: 0 1px 0 rgba(255,255,255,.20);
+    }
+
+    .small{ font-size: 12px; color:#666; }
+    .movelist{ max-height: calc(var(--sq) * 9 + 92px); overflow:auto; width: min(560px, 92vw); }
+    .movelist ol{ margin:0; padding-left:22px; }
+    .movelist li{ padding: 4px 6px; border-radius: 8px; cursor:pointer; }
+    .movelist li:hover{ background:#f3f3f3; }
+    .movelist li.active{ background:#e7efff; }
+    .tagBranch{
+      display:inline-block;
+      margin-left: 8px;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      border: 1px solid #d7d7d7;
+      background:#fff;
+      color:#444;
+    }
+    .branchBar{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex-wrap:wrap;
+      justify-content:center;
+    }
+    select{
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid #cfcfcf;
+      background:#fff;
+    }
+  </style>
+</head>
+<body>
+  <h1>簡易 棋譜再生（KIF / 分岐つき）</h1>
+
+  <div class="row">
+    <div class="panel">
+      <div class="controls">
+        <!-- iOSで選べない時があるなら accept を消すのが最強 -->
+        <input id="file" type="file" accept=".kif,.kifu,.txt,text/plain,application/octet-stream" />
+        <button id="btnSample" title="同じリポジトリに piyo_prev_game.kif を置いた場合">サンプル読込</button>
+      </div>
+      <div style="margin-top:10px">
+        <div class="small">ファイルが面倒なら、ここにKIFを貼って「貼付読込」でもOK。</div>
+        <textarea id="kifText" placeholder="ここにKIFを貼り付け"></textarea>
+        <div class="controls" style="margin-top:8px">
+          <button id="btnLoadText">貼付読込</button>
+          <button id="btnReset">初期局面</button>
+          <button id="btnCopyLineKif">このラインをKIFコピー</button>
+        </div>
+      </div>
+      <div class="meta" id="meta"></div>
+    </div>
+
+    <div class="panel">
+      <div class="boardArea">
+        <div class="handBox handLeft">
+          <div class="handTitle"><span>後手</span><span class="small" id="goteNote"></span></div>
+          <div class="handGrid" id="handGote"></div>
+        </div>
+
+        <div class="boardWrap">
+          <div class="boardFrame">
+            <table class="board" id="board"></table>
+          </div>
+
+          <div class="branchBar">
+            <span class="small" id="branchHint">分岐：なし</span>
+            <select id="branchSelect" style="display:none"></select>
+          </div>
+
+          <div class="controls">
+            <button id="btnFirst">|&lt;</button>
+            <button id="btnPrev">&lt;</button>
+            <button id="btnNext">&gt;</button>
+            <button id="btnLast">&gt;|</button>
+          </div>
+          <div class="controls">
+            <input id="slider" type="range" min="0" max="0" value="0" />
+            <span id="plyLabel" class="small">0手目</span>
+          </div>
+          <div class="small" id="moveLabel"></div>
+        </div>
+
+        <div class="handBox handRight">
+          <div class="handTitle"><span>先手</span><span class="small" id="senteNote"></span></div>
+          <div class="handGrid" id="handSente"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel movelist">
+      <div class="small" style="margin-bottom:6px">手順（タップで移動）</div>
+      <ol id="moves"></ol>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ---- Helpers: text decode (cp932/shift-jis)
+  function decodeKif(buf) {
+    const encs = ["shift-jis", "cp932", "utf-8"];
+    for (const enc of encs) {
+      try {
+        const td = new TextDecoder(enc, { fatal: false });
+        const txt = td.decode(buf);
+        if (txt && (txt.includes("手数----指手") || txt.includes("手数") || txt.includes("先手") || txt.includes("後手"))) return txt;
+      } catch (_) {}
+    }
+    return new TextDecoder("utf-8").decode(buf);
+  }
+
+  // ---- Shogi representation
+  const PIECE = {
+    P:"歩", L:"香", N:"桂", S:"銀", G:"金", B:"角", R:"飛", K:"玉",
+    pP:"と", pL:"杏", pN:"圭", pS:"全", pB:"馬", pR:"龍",
+  };
+  function promote(kind){
+    if (kind === "P") return "pP";
+    if (kind === "L") return "pL";
+    if (kind === "N") return "pN";
+    if (kind === "S") return "pS";
+    if (kind === "B") return "pB";
+    if (kind === "R") return "pR";
+    return kind;
+  }
+  function unpromote(kind){
+    if (kind === "pP") return "P";
+    if (kind === "pL") return "L";
+    if (kind === "pN") return "N";
+    if (kind === "pS") return "S";
+    if (kind === "pB") return "B";
+    if (kind === "pR") return "R";
+    return kind;
+  }
+  function isPromoted(kind){ return kind.startsWith("p"); }
+
+  function emptyBoard() {
+    return Array.from({length:10}, () => Array(10).fill(null));
+  }
+
+  function initStartpos() {
+    const b = emptyBoard();
+    const ranks = [
+      "lnsgkgsnl",
+      "1r5b1",
+      "ppppppppp",
+      "9",
+      "9",
+      "9",
+      "PPPPPPPPP",
+      "1B5R1",
+      "LNSGKGSNL",
+    ];
+    for (let r=1; r<=9; r++){
+      const row = ranks[r-1];
+      let f = 9;
+      for (let i=0; i<row.length; i++){
+        const ch = row[i];
+        if (/\d/.test(ch)) { f -= Number(ch); continue; }
+        const side = (ch === ch.toUpperCase()) ? "b" : "w";
+        const pc = ch.toUpperCase();
+        const kind = pc === "P" ? "P" :
+                     pc === "L" ? "L" :
+                     pc === "N" ? "N" :
+                     pc === "S" ? "S" :
+                     pc === "G" ? "G" :
+                     pc === "B" ? "B" :
+                     pc === "R" ? "R" : "K";
+        b[r][f] = { side, kind };
+        f -= 1;
+      }
+    }
+    const hands = { b:{}, w:{} };
+    return { board:b, hands, stm:"b", lastTo:null };
+  }
+
+  function clonePos(pos){
+    const b2 = emptyBoard();
+    for (let r=1;r<=9;r++) for (let f=1;f<=9;f++){
+      const p = pos.board[r][f];
+      b2[r][f] = p ? { side:p.side, kind:p.kind } : null;
+    }
+    const h2 = { b:{}, w:{} };
+    for (const s of ["b","w"]) for (const k in pos.hands[s]) h2[s][k] = pos.hands[s][k];
+    return { board:b2, hands:h2, stm:pos.stm, lastTo: pos.lastTo ? { ...pos.lastTo } : null };
+  }
+
+  // ---- KIF parsing (main + variations "変化：N手")
+  const FW_DIGITS = "０１２３４５６７８９";
+  const KAN_RANK = { "一":1,"二":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9 };
+  function parseDest(s, lastTo) {
+    s = s.trim();
+    if (s.startsWith("同")) {
+      if (!lastTo) return null;
+      return { f:lastTo.f, r:lastTo.r, rest: s.replace(/^同\s*/, "") };
+    }
+    const fch = s[0], rch = s[1];
+    const f = FW_DIGITS.indexOf(fch);
+    const r = KAN_RANK[rch];
+    if (!(f>=1 && f<=9 && r>=1 && r<=9)) return null;
+    return { f, r, rest: s.slice(2) };
+  }
+
+  function parsePieceAndFlags(rest) {
+    rest = rest.replace(/\s+/g, "");
+    let isDrop = rest.includes("打");
+    rest = rest.replace(/打/g, "");
+    let forceNoProm = rest.includes("不成");
+    rest = rest.replace(/不成/g, "");
+    rest = rest.replace(/[右左直寄引上行]/g, "");
+
+    const tokens = [
+      ["成銀","pS"], ["成桂","pN"], ["成香","pL"], ["成歩","pP"],
+      ["と","pP"], ["馬","pB"], ["龍","pR"], ["竜","pR"],
+      ["飛","R"], ["角","B"], ["金","G"], ["銀","S"], ["桂","N"], ["香","L"], ["歩","P"], ["玉","K"], ["王","K"],
+    ];
+    let kind = null;
+    for (const [t,k] of tokens){
+      if (rest.startsWith(t)) { kind = k; rest = rest.slice(t.length); break; }
+    }
+    if (!kind) return null;
+
+    let prom = false;
+    if (!forceNoProm && rest.startsWith("成")) { prom = true; rest = rest.slice(1); }
+    if (forceNoProm) prom = false;
+    if (isPromoted(kind)) prom = false;
+
+    return { kind, prom, isDrop };
+  }
+
+  function parseMoveLine(line) {
+    //  11 ８七歩打 ( 0:01/00:00:06)
+    //   1 ２六歩(27)( 0:01/00:00:01)
+    const m1 = line.match(/^\s*(\d+)\s+(.+?)\((\d\d)\)\s*\(/);
+    if (m1) return { no:Number(m1[1]), mvStr:m1[2].trim(), from:m1[3], raw:line };
+    const m2 = line.match(/^\s*(\d+)\s+(.+?)\s*\(/);
+    if (m2) return { no:Number(m2[1]), mvStr:m2[2].trim(), from:null, raw:line };
+    return null;
+  }
+
+  function parseKifWithBranches(text) {
+    const lines = text.split(/\r?\n/);
+    const meta = {};
+    let inMoves = false;
+
+    const mainMoves = [];
+    const variations = []; // { startNo, moves:[] }
+
+    let curVar = null;
+
+    for (const line0 of lines) {
+      const line = line0.trimEnd();
+      if (!line) continue;
+
+      if (line.includes("手数----指手")) { inMoves = true; continue; }
+
+      if (!inMoves) {
+        const m = line.match(/^([^：]+)：(.*)$/);
+        if (m) meta[m[1].trim()] = m[2].trim();
+        continue;
+      }
+
+      if (line.startsWith("*")) continue;
+
+      const vh = line.match(/^変化：\s*(\d+)\s*手/);
+      if (vh) {
+        if (curVar) variations.push(curVar);
+        curVar = { startNo: Number(vh[1]), moves: [] };
+        continue;
+      }
+
+      const mv = parseMoveLine(line);
+      if (!mv) continue;
+
+      if (curVar) curVar.moves.push(mv);
+      else mainMoves.push(mv);
+    }
+
+    if (curVar) variations.push(curVar);
+
+    // map variations to ply index (start ply = startNo-1)
+    const varMap = new Map(); // ply -> array of variations
+    for (const v of variations) {
+      const ply = Math.max(0, v.startNo - 1);
+      if (!varMap.has(ply)) varMap.set(ply, []);
+      varMap.get(ply).push(v);
+    }
+
+    return { meta, mainMoves, varMap };
+  }
+
+  // ---- Move legality (simple) for inference when from missing
+  function dir(side){ return side === "b" ? -1 : 1; }
+  function inside(f,r){ return f>=1 && f<=9 && r>=1 && r<=9; }
+
+  function canReach(board, side, kind, fromF, fromR, toF, toR) {
+    const df = toF - fromF;
+    const dr = toR - fromR;
+    const d = dir(side);
+
+    function clearLine(stepF, stepR) {
+      let f = fromF + stepF, r = fromR + stepR;
+      while (f !== toF || r !== toR) {
+        if (!inside(f,r)) return false;
+        if (board[r][f]) return false;
+        f += stepF; r += stepR;
+      }
+      return true;
+    }
+
+    if (kind === "pP" || kind === "pL" || kind === "pN" || kind === "pS" || kind === "G") {
+      return (
+        (df===0 && dr===d) ||
+        (Math.abs(df)===1 && dr===d) ||
+        (Math.abs(df)===1 && dr===0) ||
+        (df===0 && dr===-d)
+      );
+    }
+    if (kind === "S") {
+      return (
+        (df===0 && dr===d) ||
+        (Math.abs(df)===1 && dr===d) ||
+        (Math.abs(df)===1 && dr===-d)
+      );
+    }
+    if (kind === "K") return Math.abs(df)<=1 && Math.abs(dr)<=1 && !(df===0 && dr===0);
+    if (kind === "P") return df===0 && dr===d;
+    if (kind === "N") return (Math.abs(df)===1 && dr===2*d);
+    if (kind === "L") {
+      if (df!==0) return false;
+      if ((toR-fromR)*d <= 0) return false;
+      return clearLine(0, d);
+    }
+    if (kind === "B" || kind === "pB") {
+      if (Math.abs(df) === Math.abs(dr) && df!==0) {
+        const stepF = df>0?1:-1;
+        const stepR = dr>0?1:-1;
+        if (!clearLine(stepF, stepR)) return false;
+        return true;
+      }
+      if (kind === "pB") return (Math.abs(df)===1 && dr===0) || (Math.abs(dr)===1 && df===0);
+      return false;
+    }
+    if (kind === "R" || kind === "pR") {
+      if ((df===0 && dr!==0) || (dr===0 && df!==0)) {
+        const stepF = df===0 ? 0 : (df>0?1:-1);
+        const stepR = dr===0 ? 0 : (dr>0?1:-1);
+        if (!clearLine(stepF, stepR)) return false;
+        return true;
+      }
+      if (kind === "pR") return Math.abs(df)===1 && Math.abs(dr)===1;
+      return false;
+    }
+    return false;
+  }
+
+  function applyMove(pos, mvObj) {
+    const next = clonePos(pos);
+    const side = next.stm;
+
+    const destParsed = parseDest(mvObj.mvStr, next.lastTo);
+    if (!destParsed) return { next, ok:false };
+    const { f:toF, r:toR, rest } = destParsed;
+
+    const pf = parsePieceAndFlags(rest);
+    if (!pf) return { next, ok:false };
+
+    let { kind, prom, isDrop } = pf;
+
+    const target = next.board[toR][toF];
+    if (target && target.side !== side) {
+      const capBase = unpromote(target.kind);
+      next.hands[side][capBase] = (next.hands[side][capBase] || 0) + 1;
+    }
+
+    let fromF = null, fromR = null;
+    if (!isDrop && mvObj.from) {
+      fromF = Number(mvObj.from[0]);
+      fromR = Number(mvObj.from[1]);
+    }
+
+    if (isDrop) {
+      const base = unpromote(kind);
+      if ((next.hands[side][base] || 0) > 0) next.hands[side][base] -= 1;
+      next.board[toR][toF] = { side, kind: base };
+    } else {
+      let piece = null;
+      if (fromF && fromR) piece = next.board[fromR][fromF];
+
+      if (!piece || piece.side !== side) {
+        const wantBase = unpromote(kind);
+        let found = null;
+        for (let r=1;r<=9;r++) for (let f=1;f<=9;f++){
+          const p = next.board[r][f];
+          if (!p || p.side !== side) continue;
+          if (unpromote(p.kind) !== wantBase) continue;
+          if (canReach(next.board, side, p.kind, f, r, toF, toR)) { found = {f,r,p}; break; }
+        }
+        if (found) { fromF = found.f; fromR = found.r; piece = found.p; }
+        else { piece = { side, kind: wantBase }; fromF = null; fromR = null; }
+      }
+
+      if (fromF && fromR) next.board[fromR][fromF] = null;
+
+      let movedKind = piece.kind;
+      if (prom) movedKind = promote(unpromote(movedKind));
+      next.board[toR][toF] = { side, kind: movedKind };
+    }
+
+    next.lastTo = { f:toF, r:toR };
+    next.stm = (side === "b") ? "w" : "b";
+    return { next, ok:true };
+  }
+
+  // ---- UI state: mainline + branch selections
+  let kif = null;           // {meta, mainMoves, varMap}
+  let branchChoice = {};    // ply -> selected index (0=main continuation, 1..=variation#)
+  let pathMoves = [];       // effective move list after applying branch choices
+  let positions = [];       // positions[ply]
+  let curPly = 0;
+
+  // elements
+  const elBoard = document.getElementById("board");
+  const elMoves = document.getElementById("moves");
+  const elSlider = document.getElementById("slider");
+  const elPlyLabel = document.getElementById("plyLabel");
+  const elMoveLabel = document.getElementById("moveLabel");
+  const elMeta = document.getElementById("meta");
+  const elFile = document.getElementById("file");
+  const elKifText = document.getElementById("kifText");
+  const elHandGote = document.getElementById("handGote");
+  const elHandSente = document.getElementById("handSente");
+  const elBranchHint = document.getElementById("branchHint");
+  const elBranchSelect = document.getElementById("branchSelect");
+
+  function renderBoard(pos) {
+    elBoard.innerHTML = "";
+    for (let r=1; r<=9; r++) {
+      const tr = document.createElement("tr");
+      for (let f=9; f>=1; f--) {
+        const td = document.createElement("td");
+        const p = pos.board[r][f];
+        if (p) {
+          const span = document.createElement("span");
+          span.className = "piece";
+          const k = p.kind;
+          const base = unpromote(k);
+          const label = (isPromoted(k) ? PIECE[k] : PIECE[base]) || "?";
+          span.textContent = label;
+          if (p.side === "w") span.classList.add("gote");
+          td.appendChild(span);
+        }
+        tr.appendChild(td);
+      }
+      elBoard.appendChild(tr);
+    }
+  }
+
+  function renderHands(pos) {
+    function fill(el, side){
+      el.innerHTML = "";
+      const order = ["R","B","G","S","N","L","P"];
+      let any = false;
+      for (const k of order) {
+        const n = pos.hands[side][k] || 0;
+        if (n<=0) continue;
+        any = true;
+        const d = document.createElement("span");
+        d.className = "handPiece";
+        d.innerHTML = `${PIECE[k]}<small>×${n}</small>`;
+        el.appendChild(d);
+      }
+      if (!any) el.innerHTML = `<span class="small">なし</span>`;
+    }
+    fill(elHandGote, "w");
+    fill(elHandSente, "b");
+  }
+
+  function computeEffectivePath() {
+    // build from main moves; if a branch is chosen at ply X, then from that ply onward, replace continuation with variation moves (and stop following main)
+    const out = [];
+    let i = 0;
+    while (i < kif.mainMoves.length) {
+      const ply = out.length; // current ply before pushing next move
+      const varList = kif.varMap.get(ply) || null;
+
+      const choice = branchChoice[ply] ?? 0; // 0=main, 1..=variation index
+      if (varList && choice > 0) {
+        const v = varList[choice - 1];
+        // variation moves include move numbers continuing from start; we just play them as given and then stop (KIF variations usually end line)
+        for (const mv of v.moves) out.push(mv);
+        break;
+      } else {
+        out.push(kif.mainMoves[i]);
+        i += 1;
+      }
+    }
+    return out;
+  }
+
+  function buildPositions() {
+    pathMoves = computeEffectivePath();
+    positions = [];
+    let pos = initStartpos();
+    positions.push(clonePos(pos));
+    for (const m of pathMoves) {
+      const res = applyMove(pos, m);
+      pos = res.next;
+      positions.push(clonePos(pos));
+    }
+    elSlider.max = String(Math.max(0, positions.length-1));
+    renderMovelist();
+    setPly(Math.min(curPly, positions.length-1));
+  }
+
+  function renderMovelist() {
+    elMoves.innerHTML = "";
+    pathMoves.forEach((m, idx) => {
+      const li = document.createElement("li");
+      const ply = idx + 1;
+      li.textContent = `${ply}. ${m.mvStr}${m.from ? " ("+m.from+")" : ""}`;
+
+      // show branch badge if this ply-1 has variations
+      const varList = kif.varMap.get(ply-1);
+      if (varList && varList.length) {
+        const b = document.createElement("span");
+        b.className = "tagBranch";
+        const sel = branchChoice[ply-1] ?? 0;
+        b.textContent = sel === 0 ? `分岐(${varList.length})` : `分岐→${sel}/${varList.length}`;
+        li.appendChild(b);
+      }
+
+      li.dataset.ply = String(ply);
+      li.addEventListener("click", () => setPly(ply));
+      elMoves.appendChild(li);
+    });
+    highlightMovelist();
+  }
+
+  function highlightMovelist() {
+    const lis = elMoves.querySelectorAll("li");
+    lis.forEach(li => li.classList.remove("active"));
+    if (curPly >= 1) {
+      const li = elMoves.querySelector(`li[data-ply="${curPly}"]`);
+      if (li) {
+        li.classList.add("active");
+        li.scrollIntoView({ block:"nearest" });
+      }
+    }
+  }
+
+  function updateBranchUI() {
+    const ply = curPly; // branch point is "current position ply"
+    const varList = kif?.varMap?.get(ply) || null;
+
+    if (!varList || varList.length === 0) {
+      elBranchHint.textContent = "分岐：なし";
+      elBranchSelect.style.display = "none";
+      return;
+    }
+
+    const sel = branchChoice[ply] ?? 0;
+    elBranchHint.textContent = `分岐：この局面から ${varList.length} 本`;
+
+    elBranchSelect.innerHTML = "";
+    const optMain = document.createElement("option");
+    optMain.value = "0";
+    optMain.textContent = "本筋（続き）";
+    elBranchSelect.appendChild(optMain);
+
+    varList.forEach((v, idx) => {
+      const opt = document.createElement("option");
+      opt.value = String(idx + 1);
+      const head = v.moves[0]?.mvStr || "（空）";
+      opt.textContent = `変化${idx+1}：${head}`;
+      elBranchSelect.appendChild(opt);
+    });
+
+    elBranchSelect.value = String(sel);
+    elBranchSelect.style.display = "inline-block";
+  }
+
+  function setPly(ply) {
+    ply = Math.max(0, Math.min(ply, positions.length-1));
+    curPly = ply;
+    elSlider.value = String(ply);
+    elPlyLabel.textContent = `${ply}手目`;
+
+    const pos = positions[ply];
+    renderBoard(pos);
+    renderHands(pos);
+    highlightMovelist();
+
+    if (ply === 0) elMoveLabel.textContent = "初期局面";
+    else {
+      const m = pathMoves[ply-1];
+      elMoveLabel.textContent = `${ply}. ${m.mvStr}${m.from ? " ("+m.from+")" : ""}`;
+    }
+
+    updateBranchUI();
+  }
+
+  function setMeta(meta) {
+    const keys = ["棋戦","戦型","開始日時","終了日時","手合割","先手","後手"];
+    let out = "";
+    for (const k of keys) if (meta[k]) out += `${k}：${meta[k]}\n`;
+    elMeta.textContent = out.trim();
+  }
+
+  function loadKifText(text) {
+    kif = parseKifWithBranches(text);
+    branchChoice = {};
+    setMeta(kif.meta);
+    curPly = 0;
+    buildPositions();
+  }
+
+  // ---- Export current line as KIF text
+  function exportCurrentLineAsKifText() {
+    const keys = ["棋戦","戦型","開始日時","終了日時","手合割","先手","後手"];
+    let out = "";
+    const meta = kif && kif.meta ? kif.meta : {};
+    for (const k of keys) if (meta[k]) out += `${k}：${meta[k]}\n`;
+    out += "手数----指手---------消費時間--\n";
+    const lm = (typeof pathMoves !== "undefined" && Array.isArray(pathMoves)) ? pathMoves : [];
+    for (let i = 0; i < lm.length; i++) {
+      const m = lm[i];
+      const no = i + 1;
+      const from = m && m.from ? `(${m.from})` : "";
+      const mvStr = m && m.mvStr ? m.mvStr : "";
+      out += `${String(no).padStart(3," ")} ${mvStr}${from}\n`;
+    }
+    try {
+      const hasVar = branchChoice && Object.values(branchChoice).some(v => Number(v) > 0);
+      if (hasVar) out += "* exported variation\n";
+    } catch (_) {}
+    return out;
+  }
+
+  // buttons
+  document.getElementById("btnFirst").addEventListener("click", () => setPly(0));
+  document.getElementById("btnPrev").addEventListener("click", () => setPly(curPly-1));
+  document.getElementById("btnNext").addEventListener("click", () => setPly(curPly+1));
+  document.getElementById("btnLast").addEventListener("click", () => setPly(positions.length-1));
+  elSlider.addEventListener("input", (e) => setPly(Number(e.target.value)));
+
+  document.getElementById("btnReset").addEventListener("click", () => {
+    if (!kif) {
+      kif = { meta:{}, mainMoves:[], varMap:new Map() };
+      positions = [initStartpos()];
+      elSlider.max = "0";
+    }
+    branchChoice = {};
+    buildPositions();
+    setPly(0);
+  });
+
+  document.getElementById("btnLoadText").addEventListener("click", () => {
+    const t = elKifText.value;
+    if (!t.trim()) return;
+    loadKifText(t);
+  });
+
+  elFile.addEventListener("change", async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const buf = await f.arrayBuffer();
+    const text = decodeKif(buf);
+    elKifText.value = text;
+    loadKifText(text);
+  });
+
+  document.getElementById("btnSample").addEventListener("click", async () => {
+    try {
+      const res = await fetch("./piyo_prev_game.kif", { cache: "no-store" });
+      if (!res.ok) throw new Error("fetch failed");
+      const buf = await res.arrayBuffer();
+      const text = decodeKif(buf);
+      elKifText.value = text;
+      loadKifText(text);
+    } catch (e) {
+      alert("サンプルが見つからないわ。リポジトリ直下に piyo_prev_game.kif を置いてね。");
+    }
+  });
+
+  // branch select
+  elBranchSelect.addEventListener("change", () => {
+    const v = Number(elBranchSelect.value);
+    const ply = curPly;
+    branchChoice[ply] = v; // 0=main, 1..=variation
+    buildPositions();
+    setPly(ply);
+  });
+
+  // copy current line KIF
+  document.getElementById("btnCopyLineKif").addEventListener("click", async () => {
+    const text = exportCurrentLineAsKifText();
+    const fallback = () => {
+      elKifText.value = text;
+      elKifText.focus();
+      try {
+        elKifText.select();
+        elKifText.setSelectionRange(0, elKifText.value.length);
+      } catch (_) {}
+    };
+
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        alert("コピーしたわ。");
+      } else {
+        fallback();
+        alert("コピーできないから、テキスト欄に出したわ。");
+      }
+    } catch (_) {
+      fallback();
+      alert("コピーできないから、テキスト欄に出したわ。");
+    }
+  });
+
+  // initial empty render
+  kif = { meta:{}, mainMoves:[], varMap:new Map() };
+  positions = [initStartpos()];
+  renderBoard(positions[0]);
+  renderHands(positions[0]);
+  updateBranchUI();
+})();
+  async function autoLoadKifFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const kifName = params.get("kif");
+  if (!kifName) return;
+
+  if (kifName.includes("..") || kifName.includes("/") || kifName.includes("\\")) {
+    alert("kifパラメータが不正です");
+    return;
+  }
+
+  const url = `kif/${encodeURIComponent(kifName)}`;
+
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) throw new Error(`KIF取得失敗: ${res.status}`);
+    const kifText = await res.text();
+
+    // あなたのUIに合わせたID
+    const ta = document.getElementById("kifText");
+    const loadBtn = document.getElementById("btnLoadText");
+
+    if (!ta || !loadBtn) {
+      alert("UI要素が見つかりません（ID確認）");
+      return;
+    }
+
+    ta.value = kifText;
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+    ta.dispatchEvent(new Event("change", { bubbles: true }));
+    loadBtn.click();
+
+
+  } catch (e) {
+    console.error(e);
+    alert(e?.message || String(e));
+  }
+}
+
+window.addEventListener("DOMContentLoaded", autoLoadKifFromUrl);
+
+</script>
+</body>
+</html>

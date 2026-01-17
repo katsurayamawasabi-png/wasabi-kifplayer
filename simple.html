@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>Shogi Board Viewer</title>
+
+  <script src="https://unpkg.com/kifu-for-js@1.0.10/dist/kifu-for-js.min.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+
+    #board-wrapper {
+      transform: scale(0.7);
+      transform-origin: top center;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="board-wrapper">
+    <div id="board"></div>
+  </div>
+
+  <script>
+    async function loadKifFromUrl() {
+      const params = new URLSearchParams(location.search);
+      const kifName = params.get("kif");
+      if (!kifName) return;
+
+      if (kifName.includes("..") || kifName.includes("/") || kifName.includes("\\")) {
+        alert("Invalid kif name");
+        return;
+      }
+
+      const url = `kif/${encodeURIComponent(kifName)}`;
+
+      try {
+        const res = await fetch(url, { cache: "no-store" });
+        if (!res.ok) throw new Error("KIF not found");
+        const kifText = await res.text();
+
+        await KifuForJS.load(
+          { kifu: kifText },
+          "board"
+        );
+
+      } catch (e) {
+        console.error(e);
+        alert(e.message);
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", loadKifFromUrl);
+  </script>
+</body>
+</html>
