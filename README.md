@@ -1,3 +1,7 @@
+たそさん、りんさん作成のビューワー(https://github.com/Qupffer/Shogi_kifplayer/tree/main)
+を個人使用のため複製したものです。
+READMEについて、以下は原文ママです。
+
 # Shogi KIF Player for Notion
 
 Notionに埋め込んで使える、将棋KIF棋譜ビューアです。  
@@ -31,4 +35,5 @@ UIデザインは友人のプロジェクト
 ## ライセンス
 
 MIT License
+
 
